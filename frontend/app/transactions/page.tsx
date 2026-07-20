@@ -4,12 +4,18 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchTransactions, deleteTransaction } from '@/services/api';
 import { Trash2, Calendar, Tag, DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
+// Import your auth hook – adjust the path to your actual auth provider
+import { useAuth } from '@/contexts/AuthContext'; 
 
 export default function TransactionsPage() {
+  const { user } = useAuth(); // get the current user object
+  const userId = user?.id || ''; // extract userId (fallback to empty string)
   const queryClient = useQueryClient();
+
   const { data: resp, isLoading } = useQuery({
-    queryKey: ["transactions"],
-    queryFn: () => fetchTransactions().then(res => res.data)
+    queryKey: ["transactions", userId], // include userId in key to refetch when user changes
+    queryFn: () => fetchTransactions(userId).then(res => res.data),
+    enabled: !!userId, // only run the query if we have a userId
   });
 
   const transactions = resp?.data || [];
@@ -18,7 +24,7 @@ export default function TransactionsPage() {
     try {
       await deleteTransaction(id);
       toast.success("Transaction Removed");
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions", userId] });
     } catch (e) { toast.error("Delete failed"); }
   };
 
