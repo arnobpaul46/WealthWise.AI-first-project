@@ -1,117 +1,84 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
-import { DollarSign, TrendingUp, TrendingDown, Calendar, Bot, Loader2, Brain, Send, AlertCircle } from "lucide-react";
-import toast from "react-hot-toast";
-import { motion, AnimatePresence } from "framer-motion";
-import { fetchTransactions, processWithAI } from "@/services/api";
-import { getUserId } from "@/src/lib/user";
-import { calculateTotals, groupByMonth, groupByCategory, formatCurrency } from "@/src/lib/transactions";
+import { Brain, Send, Loader2, Sparkles, TrendingUp, TrendingDown } from 'lucide-react';
+import { fetchTransactions, processWithAI } from '@/services/api';
+import toast from 'react-hot-toast';
 
 export default function Dashboard() {
-  const [mounted, setMounted] = useState(false);
-  const [inputText, setInputText] = useState(""); // স্টেট এর নাম inputText
-  const [aiLoading, setAiLoading] = useState(false);
+  const [inputText, setInputText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [suggestion, setSuggestion] = useState("");
   const queryClient = useQueryClient();
-  const userId = getUserId();
 
-  useEffect(() => { setMounted(true); }, []);
+  // ১. লোকাল স্টোরেজ থেকে আইডি নেওয়া
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => { setUserId(localStorage.getItem('wealthwise_user_id')); }, []);
 
-  // dashboard/page.tsx এর ভেতরে useQuery আপডেট করুন
-  // dashboard/page.tsx এর ভেতরে useQuery সেকশনটি এভাবে আপডেট করুন
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["transactions"],
-    queryFn: async () => {
-      const response = await fetchTransactions();
-      // ব্যাকএন্ড এখন { success: true, data: [...] } পাঠাচ্ছে
-      // তাই আমাদের response.data.data নিতে হবে
-      return (response.data?.data ?? []) as any[];
-    },
-    enabled: mounted,
+  // ২. ডাটা ফেচ করা
+  const { data: resp } = useQuery({
+    queryKey: ["transactions", userId],
+    queryFn: () => fetchTransactions(userId!).then(res => res.data),
+    enabled: !!userId
   });
 
-  const transactions = data ?? [];
-  const totals = useMemo(() => calculateTotals(transactions), [transactions]);
-  const monthlyData = useMemo(() => groupByMonth(transactions), [transactions]);
-  const categoryData = useMemo(() => groupByCategory(transactions), [transactions]);
+  const transactions = resp?.data || [];
+  
+  // ৩. রিয়েল-টাইম ক্যালকুলেশন
+  const stats = useMemo(() => {
+    const inc = transactions.filter((t:any) => t.type === 'income').reduce((s:number, t:any) => s + t.amount, 0);
+    const exp = transactions.filter((t:any) => t.type === 'expense').reduce((s:number, t:any) => s + t.amount, 0);
+    return { income: inc, expenses: exp, balance: inc - exp };
+  }, [transactions]);
 
-  const handleAISubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!inputText.trim()) return;
-
+  // ৪. সাবমিট হ্যান্ডলার (নিশ্চিত করে আইডি পাঠানো হচ্ছে)
+  const handleAISubmit = async () => {
+    if (!inputText.trim() || !userId) return;
+    setLoading(true);
     try {
-      setAiLoading(true);
-      await processWithAI(inputText); // এটি এখন সরাসরি কাজ করবে
-      setInputText("");
-      toast.success("AI categorized and saved your transaction!");
-      queryClient.invalidateQueries({ queryKey: ["transactions"] }); // ডাটা রিফ্রেশ
-    } catch (error) {
-      console.error(error);
-      toast.error("AI processing failed. Check backend.");
-    } finally {
-      setAiLoading(false);
-    }
+      const res = await processWithAI(inputText, userId);
+      if (res.data.success) {
+        setSuggestion(res.data.suggestion);
+        toast.success(res.data.data.type === 'income' ? "Income Added!" : "Expense Added!");
+        setInputText("");
+        queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      }
+    } catch (e) {
+      toast.error("Process interrupted, try again.");
+    } finally { setLoading(false); }
   };
 
-  if (isLoading) return <div className="p-10 text-center animate-pulse text-indigo-400">Loading Dashboard...</div>;
-
   return (
-    <div className="space-y-10 py-6 max-w-7xl mx-auto">
-      {/* AI Input Section */}
-      <section className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-6 shadow-2xl">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg"><Brain className="h-5 w-5 text-white" /></div>
-          <h3 className="text-lg font-bold text-slate-100">Talk to WealthWise AI</h3>
-        </div>
+    <div className="max-w-7xl mx-auto space-y-8 py-6 px-4">
+      {/* ডিজাইন আগের মতোই থাকবে */}
+      <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-3xl shadow-2xl">
+        <h2 className="text-xl font-bold mb-4 text-white flex items-center gap-2"><Brain className="text-indigo-500" /> AI Wealth Agent</h2>
         <div className="relative">
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder='e.g., "Spent 500 on dinner yesterday"'
-            className="w-full h-24 bg-slate-950 border border-slate-800 rounded-xl p-4 text-white focus:border-indigo-500 outline-none"
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAISubmit()}
-          />
-          <button
-            onClick={() => handleAISubmit()}
-            disabled={aiLoading || !inputText.trim()}
-            className="absolute bottom-4 right-4 bg-indigo-600 px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-indigo-500 transition-all"
-          >
-            {aiLoading ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />}
-            Submit
+          <textarea value={inputText} onChange={(e) => setInputText(e.target.value)} className="w-full h-24 bg-slate-950 border border-slate-800 rounded-2xl p-4 text-white outline-none" placeholder="Type: 'Salary 5000' or 'Rent 1200'..." />
+          <button onClick={handleAISubmit} disabled={loading} className="absolute bottom-4 right-4 bg-indigo-600 px-6 py-2 rounded-xl font-bold text-white flex items-center gap-2">
+            {loading ? <Loader2 className="animate-spin h-4 w-4" /> : <Send className="h-4 w-4" />} Analyze
           </button>
         </div>
-      </section>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-          <p className="text-slate-400 text-xs uppercase font-bold">Total Balance</p>
-          <h2 className="text-3xl font-black mt-2 text-white">{formatCurrency(totals.balance)}</h2>
-        </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-          <p className="text-slate-400 text-xs uppercase font-bold text-red-400">Expenses</p>
-          <h2 className="text-3xl font-black mt-2 text-white">{formatCurrency(totals.expenses)}</h2>
-        </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
-          <p className="text-slate-400 text-xs uppercase font-bold text-emerald-400">Income</p>
-          <h2 className="text-3xl font-black mt-2 text-white">{formatCurrency(totals.income)}</h2>
-        </div>
+        {suggestion && (
+          <div className="mt-4 p-4 bg-indigo-900/30 border border-indigo-500/30 rounded-xl text-indigo-100 flex items-start gap-2">
+            <Sparkles className="h-5 w-5 text-yellow-400 shrink-0" /> <p className="text-sm font-medium italic">{suggestion}</p>
+          </div>
+        )}
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl h-[350px]">
-          <h4 className="font-bold mb-4">Monthly Overview</h4>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={monthlyData}><Area type="monotone" dataKey="Expenses" stroke="#6366f1" fill="#6366f133" /><XAxis dataKey="name" /><Tooltip /></AreaChart>
-          </ResponsiveContainer>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-white">
+        <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl">
+          <p className="text-slate-400 text-xs font-bold uppercase">Balance</p>
+          <h3 className="text-3xl font-black mt-2">${stats.balance.toFixed(2)}</h3>
         </div>
-        <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl h-[350px]">
-          <h4 className="font-bold mb-4">Spending Categories</h4>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={categoryData}><Bar dataKey="value" fill="#34d399" radius={[4, 4, 0, 0]} /><XAxis dataKey="name" /><Tooltip /></BarChart>
-          </ResponsiveContainer>
+        <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl border-l-4 border-l-red-500">
+          <p className="text-red-400 text-xs font-bold uppercase flex items-center gap-1"><TrendingDown className="h-4 w-4" /> Expenses</p>
+          <h3 className="text-3xl font-black mt-2">${stats.expenses.toFixed(2)}</h3>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-2xl border-l-4 border-l-emerald-500">
+          <p className="text-emerald-400 text-xs font-bold uppercase flex items-center gap-1"><TrendingUp className="h-4 w-4" /> Income</p>
+          <h3 className="text-3xl font-black mt-2">${stats.income.toFixed(2)}</h3>
         </div>
       </div>
     </div>

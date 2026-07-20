@@ -1,21 +1,24 @@
-// frontend/services/api.ts
-
 import axios from 'axios';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
 });
 
-// মেইন ফিক্স: এখানে (text: string, userId?: string) যোগ করা হয়েছে
-export const processWithAI = async (text: string, userId?: string) => {
-  const response = await api.post('/transactions/ai-process', { 
-    text,
-    userId: userId || '669b9b9b9b9b9b9b9b9b9b9b' // যদি আইডি না থাকে তবে ডিফল্ট আইডি
-  });
-  return response.data;
+// মেইন এআই ফাংশন
+export const processWithAI = (text: string, userId: string) => {
+  return api.post('/transactions/ai-process', { text, userId });
 };
 
-export const fetchTransactions = () => api.get('/transactions');
+// ডাটা গেট ফাংশন (আইডি সহ)
+export const fetchTransactions = (userId: string) => {
+  return api.get(`/transactions?userId=${userId}`);
+};
+
+// প্রোফাইল ডাটা আনার ফাংশন
+export const getUserProfile = (id: string) => {
+  return api.get(`/users/profile/${id}`);
+};
+
 export const deleteTransaction = (id: string) => api.delete(`/transactions/${id}`);
 
 export default api;
