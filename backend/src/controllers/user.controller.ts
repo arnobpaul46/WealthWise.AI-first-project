@@ -8,14 +8,32 @@ const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 export const googleAuth = async (req: any, res: any) => {
   try {
     const { token } = req.body;
-    const ticket = await client.verifyIdToken({ idToken: token, audience: process.env.GOOGLE_CLIENT_ID });
+
+    // Build options: only include `audience` if the env variable is defined
+    const verifyOptions: { idToken: string; audience?: string } = {
+      idToken: token,
+    };
+    if (process.env.GOOGLE_CLIENT_ID) {
+      verifyOptions.audience = process.env.GOOGLE_CLIENT_ID;
+    }
+
+    const ticket = await client.verifyIdToken(verifyOptions);
     const payload = ticket.getPayload();
+
     let user = await User.findOne({ email: payload?.email });
     if (!user) {
-      user = await User.create({ name: payload?.name, email: payload?.email, googleId: payload?.sub, picture: payload?.picture });
+      user = await User.create({
+        name: payload?.name,
+        email: payload?.email,
+        googleId: payload?.sub,
+        picture: payload?.picture,
+      });
     }
+
     res.json({ success: true, data: user });
-  } catch (error: any) { res.status(400).json({ success: false, message: error.message }); }
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
 };
 
 // ২. ম্যানুয়াল রেজিস্ট্রেশন
