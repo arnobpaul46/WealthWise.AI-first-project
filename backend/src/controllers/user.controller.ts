@@ -9,25 +9,41 @@ export const googleAuth = async (req: any, res: any) => {
   try {
     const { token } = req.body;
 
-    // Build options: only include `audience` if the env variable is defined
-    const verifyOptions: { idToken: string; audience?: string } = {
-      idToken: token,
-    };
+    // Build verify options without undefined audience
+    const verifyOptions: { idToken: string; audience?: string } = { idToken: token };
     if (process.env.GOOGLE_CLIENT_ID) {
       verifyOptions.audience = process.env.GOOGLE_CLIENT_ID;
     }
 
     const ticket = await client.verifyIdToken(verifyOptions);
     const payload = ticket.getPayload();
+    if (!payload) {
+      throw new Error('Invalid Google token: no payload');
+    }
 
-    let user = await User.findOne({ email: payload?.email });
+    // Safely extract fields, filtering out undefined
+    const { email, name, sub: googleId, picture } = payload;
+
+    // Build query object only with defined email
+    const query: { email?: string } = {};
+    if (email) query.email = email;
+
+    let user = await User.findOne(query);
+
     if (!user) {
-      user = await User.create({
-        name: payload?.name,
-        email: payload?.email,
-        googleId: payload?.sub,
-        picture: payload?.picture,
-      });
+      // Build creation object only with defined fields
+      const newUserData: {
+        name?: string;
+        email?: string;
+        googleId?: string;
+        picture?: string;
+      } = {};
+      if (name) newUserData.name = name;
+      if (email) newUserData.email = email;
+      if (googleId) newUserData.googleId = googleId;
+      if (picture) newUserData.picture = picture;
+
+      user = await User.create(newUserData);
     }
 
     res.json({ success: true, data: user });
