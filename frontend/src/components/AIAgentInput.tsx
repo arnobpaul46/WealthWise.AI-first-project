@@ -51,7 +51,8 @@ export default function AIAgentInput({
     setSuccessData(null);
 
     try {
-      const result = await processWithAI(inputText.trim(), resolvedUserId);
+      const response = await processWithAI(inputText.trim(), resolvedUserId);
+      const result = response.data; // AxiosResponse থেকে আসল ডাটা বের করলাম
 
       if (result?.success) {
         const transaction = result.data;
@@ -75,7 +76,6 @@ export default function AIAgentInput({
       setLoading(false);
     }
   };
-
   return (
     <div className="finance-card w-full max-w-xl mx-auto shadow-xl shadow-slate-950/20">
       <div className="flex items-center gap-2.5 mb-5">
@@ -192,11 +192,10 @@ export default function AIAgentInput({
               <div className="space-y-1">
                 <span className="text-[10px] text-slate-500 font-medium block">Type</span>
                 <span
-                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                    successData.type === "income"
+                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${successData.type === "income"
                       ? "bg-emerald-950/40 border border-emerald-500/20 text-emerald-400"
                       : "bg-red-950/40 border border-red-500/20 text-red-400"
-                  }`}
+                    }`}
                 >
                   {successData.type === "income" ? (
                     <TrendingUp className="h-3 w-3" />
