@@ -34,16 +34,31 @@ export default function ProfilePage() {
   if (isError || !user) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white gap-4">
       <p className="text-red-500 font-bold">Profile data not found.</p>
-      <button onClick={() => {localStorage.clear(); router.push('/login');}} className="bg-indigo-600 px-6 py-2 rounded-xl font-bold">Re-Login</button>
+      <button onClick={() => { localStorage.clear(); router.push('/login'); }} className="bg-indigo-600 px-6 py-2 rounded-xl font-bold">Re-Login</button>
     </div>
   );
 
   return (
     <div className="max-w-2xl mx-auto py-10 px-4">
       <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-10 text-center space-y-6 shadow-2xl backdrop-blur-md">
+        {/* প্রোফাইল অ্যাভাটার সেকশন - এটি রিপ্লেস করুন */}
         <div className="flex justify-center">
-          <div className="h-24 w-24 rounded-full bg-indigo-600 flex items-center justify-center border-4 border-slate-800 overflow-hidden">
-            {user.picture ? <img src={user.picture} alt="p" className="h-full w-full object-cover" /> : <UserCircle className="h-16 w-16 text-white" />}
+          <div className="h-32 w-32 rounded-full bg-gradient-to-tr from-indigo-600 to-emerald-500 p-1 shadow-2xl">
+            <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center overflow-hidden border-4 border-slate-900">
+              {user?.picture ? (
+                <img
+                  src={user.picture}
+                  alt="profile"
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    // যদি ইমেজ লোড হতে এরর দেয়, তবে আইকন দেখাবে
+                    (e.target as any).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <UserCircle className="h-20 w-20 text-slate-500" />
+              )}
+            </div>
           </div>
         </div>
         <h2 className="text-2xl font-bold text-white">{user.name}</h2>

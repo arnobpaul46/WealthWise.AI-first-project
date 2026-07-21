@@ -88,6 +88,11 @@ export const demoLogin = async (req: any, res: any) => {
 export const getUserProfile = async (req: any, res: any) => {
   try {
     const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found in database" });
+    }
     res.json({ success: true, data: user });
-  } catch (e: any) { res.status(404).json({ message: "User not found" }); }
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: "Invalid ID format or Server Error" });
+  }
 };
