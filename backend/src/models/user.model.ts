@@ -6,6 +6,7 @@ const userSchema = new Schema({
   password: { type: String }, // সাধারণ লগইনের জন্য
   googleId: { type: String }, // গুগল লগইনের জন্য
   picture: { type: String },
+  monthlyBudget: { type: Number, default: 0 },
 }, { timestamps: true });
 
 export default model('User', userSchema);

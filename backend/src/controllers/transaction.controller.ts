@@ -1,75 +1,71 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import Transaction from '../models/transaction.model.js';
-import mongoose from 'mongoose';
+import User from '../models/user.model.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-export const processAITransaction = async (req: any, res: any) => {
-  const { text, userId } = req.body;
-  
-  // ১. সেফটি চেক: টেক্সট বা আইডি না থাকলে এরর বন্ধ করা
-  if (!text) return res.status(400).json({ success: false, message: "No text provided" });
-  const uid = userId || '669b9b9b9b9b9b9b9b9b9b9b'; // Fallback ID if missing
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-  let finalData: any = null;
-  let suggestion: string = "";
-
+// ১. মডাল থেকে ম্যানুয়াল ট্রানজেকশন সেভ করা (মেইন ফিক্স)
+export const createTransaction = async (req: any, res: any) => {
   try {
-    // ২. এআই কল করার চেষ্টা (Gemini-Pro)
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" }); 
-    const prompt = `Return ONLY JSON: {"title": "str", "amount": num, "type": "income"|"expense", "category": "str", "suggestion": "str"}. Input: ${text}. Rule: If earned/salary -> type is income.`;
-
-    const result = await model.generateContent(prompt);
-    const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      finalData = JSON.parse(jsonMatch[0]);
-      suggestion = finalData.suggestion;
-    } else { throw new Error("No JSON"); }
-
-  } catch (aiError: any) {
-    // ৩. আল্টিমেট ফেইল-সেফ (এআই এরর দিলেও এটি ডাটা সেভ করবেই)
-    console.log("AI Failed, using Regex Fallback...");
-    const lower = text.toLowerCase();
-    const amount = text.match(/\d+/) ? Number(text.match(/\d+/)[0]) : 0;
-    const isInc = /earned|salary|received|got|income|profit|bonus|add|deposit/i.test(lower);
-
-    finalData = {
-      title: text.length > 25 ? text.substring(0, 25) + "..." : text,
-      amount: amount,
-      type: isInc ? 'income' : 'expense',
-      category: "AI Managed"
-    };
-    suggestion = isInc ? "Great income! Save at least 20%." : "Watch your spending habits.";
-  }
-
-  try {
-    // ৪. ডাটাবেসে সেভ করা
+    const { title, amount, type, category, userId, date } = req.body;
     const newTx = new Transaction({
-      userId: uid,
-      ...finalData,
-      amount: Math.abs(finalData.amount),
-      date: new Date()
+      userId,
+      title,
+      amount: Math.abs(Number(amount)), // নিশ্চিত করা হচ্ছে এটি নাম্বার
+      type,
+      category,
+      date: date || new Date()
     });
     await newTx.save();
-    return res.status(201).json({ success: true, data: newTx, suggestion });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: "Database Error" });
+    res.status(201).json({ success: true, data: newTx });
+  } catch (e: any) {
+    res.status(400).json({ success: false, message: e.message });
   }
 };
 
-// এই গেট ফাংশনটি ফিল্টার করার জন্য একদম সঠিক
+// ২. ড্যাশবোর্ডের জন্য সব ডাটা এবং বাজেট আনা
 export const getTransactions = async (req: any, res: any) => {
   try {
     const { userId } = req.query;
-    const txs = await Transaction.find({ userId }).sort({ date: -1 });
-    res.json({ success: true, data: txs });
+    const transactions = await Transaction.find({ userId }).sort({ date: -1 });
+    const user = await User.findById(userId);
+    res.json({ success: true, data: transactions, monthlyBudget: user?.monthlyBudget || 0 });
   } catch (e: any) { res.status(500).json({ message: e.message }); }
 };
 
-// ডিলিট এবং অন্যান্য ফাংশন আগের মতোই নিচে থাকবে...
-export const deleteTransaction = async (req: any, res: any) => {
-  try { await Transaction.findByIdAndDelete(req.params.id); res.json({ success: true }); }
-  catch (e: any) { res.status(500).json({ message: e.message }); }
+// ৩. এআই প্রসেসিং ফাংশন
+export const processAITransaction = async (req: any, res: any) => {
+    try {
+      const { text, userId } = req.body;
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const prompt = `Analyze financial input: "${text}". Return ONLY JSON: {"title": "str", "amount": num, "type": "income"|"expense", "category": "str", "suggestion": "str"}`;
+      const result = await model.generateContent(prompt);
+      const jsonMatch = result.response.text().match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+  
+      if (parsed) {
+        const newTx = new Transaction({ userId, ...parsed, amount: Math.abs(parsed.amount), date: new Date() });
+        await newTx.save();
+        res.status(201).json({ success: true, data: newTx, suggestion: parsed.suggestion });
+      } else { throw new Error("Parse Fail"); }
+    } catch (e: any) {
+      // AI ফেইল করলে ম্যানুয়াল ফেইলসেফ
+      const isInc = /earned|salary|received/i.test(req.body.text);
+      const amount = req.body.text.match(/\d+/) ? Number(req.body.text.match(/\d+/)[0]) : 0;
+      const fallbackTx = new Transaction({ userId: req.body.userId, title: "AI Entry", amount, type: isInc ? 'income' : 'expense', category: 'General', date: new Date() });
+      await fallbackTx.save();
+      res.status(201).json({ success: true, data: fallbackTx, suggestion: "Logged manually." });
+    }
 };
-export const createTransaction = async (req: any, res: any) => { res.json({ success: true }); };
-export const getTransactionById = async (req: any, res: any) => { res.json({ success: true }); };
-export const updateTransaction = async (req: any, res: any) => { res.json({ success: true }); };
+
+// ৪. ডিলিট ফাংশন
+export const deleteTransaction = async (req: any, res: any) => {
+  try {
+    await Transaction.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ message: e.message }); }
+};
+
+// বাকী ২টা স্টাব (এরর এড়াতে)
+export const getTransactionById = async (req: any, res: any) => res.json({ success: true });
+export const updateTransaction = async (req: any, res: any) => res.json({ success: true });
