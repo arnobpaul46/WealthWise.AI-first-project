@@ -32,7 +32,9 @@ export default function ReportsPage() {
             .reduce((s: number, t: any) => s + t.amount, 0);
         const saved = inc - exp;
         const rate = inc > 0 ? Math.round((saved / inc) * 100) : 0;
-        const topCat = transactions.filter((t: any) => t.type === 'expense').sort((a, b) => b.amount - a.amount)[0]?.category || "General";
+        const topCat = transactions
+            .filter((t: any) => t.type === 'expense')
+            .sort((a: any, b: any) => b.amount - a.amount)[0]?.category || "General";
 
         return { inc, exp, saved, rate, topCat, status: saved >= 0 ? 'Surplus' : 'Deficit' };
     }, [transactions]);
